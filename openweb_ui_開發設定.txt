@@ -1,0 +1,40 @@
+git clone https://github.com/GaryTseng-SSSTC/open-webui.git
+cd open-webui
+
+frontend:
+- 配置環境變數：
+  將.env.example 複製為.env
+- 安裝所需的 JavaScript 套件
+  npm install --force
+- 啟動前端開發伺服器
+  npm run dev
+- Build the Frontend (Recommended)
+  npm run build
+  
+    
+
+
+
+backend:
+- vs code新增終端機
+  cd backend
+- uv venv --python 3.12
+- .venv\Scripts\activate
+- 安裝 requirements
+  uv pip install -r requirements.txt -U  
+- 啟動 backend 開發伺服器
+  在power shell-->.\dev_windows.bat
+
+
+
+
+
+
+
+
+
+
+
+
+
+
