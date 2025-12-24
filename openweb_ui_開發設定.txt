@@ -9,11 +9,10 @@ frontend:
 - 啟動前端開發伺服器
   npm run dev
 
-  
 - Build the Frontend (Recommended)
   npm run build
-  
-    
+
+
 
 
 
@@ -23,7 +22,7 @@ backend:
 - uv venv --python 3.12
 - .venv\Scripts\activate
 - 安裝 requirements
-  uv pip install -r requirements.txt -U  
+  uv pip install -r requirements.txt -U
 - 啟動 backend 開發伺服器
   在power shell-->.\dev_windows.bat
 
@@ -32,14 +31,3 @@ backend:
 
 router:
 LiteLLM
-
-
-
-
-
-
-
-
-
-
-
