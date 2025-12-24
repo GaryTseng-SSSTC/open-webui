@@ -22,6 +22,16 @@ from open_webui.env import SRC_LOG_LEVELS
 log = logging.getLogger(__name__)
 log.setLevel(SRC_LOG_LEVELS["RAG"])
 
+try:
+    from chromadb.telemetry.product import posthog as chroma_posthog
+
+    def _disable_posthog_capture(*args, **kwargs):  # pragma: no cover
+        return None
+
+    chroma_posthog.capture = _disable_posthog_capture
+except Exception as exc:  # pragma: no cover
+    log.debug(f"Unable to disable Chroma telemetry capture cleanly: {exc}")
+
 
 class ChromaClient:
     def __init__(self):

@@ -24,11 +24,14 @@ from open_webui.env import (
     SRC_LOG_LEVELS,
     OFFLINE_MODE,
     ENABLE_FORWARD_USER_INFO_HEADERS,
+    DEVICE_TYPE,
 )
 from open_webui.config import (
     RAG_EMBEDDING_QUERY_PREFIX,
     RAG_EMBEDDING_CONTENT_PREFIX,
     RAG_EMBEDDING_PREFIX_FIELD_NAME,
+    RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
+    RAG_EMBEDDING_MODEL_AUTO_UPDATE,
 )
 
 log = logging.getLogger(__name__)
@@ -36,6 +39,46 @@ log.setLevel(SRC_LOG_LEVELS["RAG"])
 
 
 from typing import Any
+
+LOCAL_EMBEDDING_MODELS: dict[str, Any] = {}
+
+
+def _get_or_create_sentence_transformer(model_name: str):
+    cached_model = LOCAL_EMBEDDING_MODELS.get(model_name)
+    if cached_model is not None:
+        return cached_model
+
+    if not model_name:
+        raise RuntimeError(
+            "No embedding model configured for local embeddings."
+        )
+
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError as exc:
+        raise RuntimeError(
+            "sentence-transformers is not installed. Install it or switch to an API-based embedding engine."
+        ) from exc
+
+    try:
+        model_path = get_model_path(
+            model_name,
+            update_model=RAG_EMBEDDING_MODEL_AUTO_UPDATE,
+        )
+        cached_model = SentenceTransformer(
+            model_path,
+            device=DEVICE_TYPE,
+            trust_remote_code=RAG_EMBEDDING_MODEL_TRUST_REMOTE_CODE,
+        )
+        LOCAL_EMBEDDING_MODELS[model_name] = cached_model
+        return cached_model
+    except Exception as exc:
+        log.error(
+            "Failed to load embedding model %s: %s", model_name, exc
+        )
+        raise RuntimeError(
+            f"Could not load embedding model '{model_name}'. Check the server logs for more details."
+        ) from exc
 
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.retrievers import BaseRetriever
@@ -364,9 +407,26 @@ def get_embedding_function(
     embedding_batch_size,
 ):
     if embedding_engine == "":
-        return lambda query, prefix=None, user=None: embedding_function.encode(
-            query, **({"prompt": prefix} if prefix else {})
-        ).tolist()
+        model_holder = {"model": embedding_function}
+
+        def ensure_model():
+            model = model_holder["model"]
+            if model is None:
+                model = _get_or_create_sentence_transformer(embedding_model)
+                model_holder["model"] = model
+            if not hasattr(model, "encode"):
+                raise RuntimeError(
+                    "The configured embedding model is invalid. Configure a valid SentenceTransformer model or switch to an API-based embedding engine."
+                )
+            return model
+
+        def encode_with_local_model(query, prefix=None, user=None):
+            model = ensure_model()
+            return model.encode(
+                query, **({"prompt": prefix} if prefix else {})
+            ).tolist()
+
+        return encode_with_local_model
     elif embedding_engine in ["ollama", "openai"]:
         func = lambda query, prefix=None, user=None: generate_embeddings(
             engine=embedding_engine,
@@ -654,7 +714,7 @@ def generate_openai_batch_embeddings(
             raise "Something went wrong :/"
     except Exception as e:
         log.exception(f"Error generating openai batch embeddings: {e}")
-        return None
+        raise
 
 
 def generate_ollama_batch_embeddings(
@@ -700,7 +760,7 @@ def generate_ollama_batch_embeddings(
             raise "Something went wrong :/"
     except Exception as e:
         log.exception(f"Error generating ollama batch embeddings: {e}")
-        return None
+        raise
 
 
 def generate_embeddings(
@@ -743,6 +803,10 @@ def generate_embeddings(
                     "user": user,
                 }
             )
+        if embeddings is None:
+            raise RuntimeError(
+                "Failed to generate embeddings via Ollama. Verify the Ollama endpoint, model, and server logs."
+            )
         return embeddings[0] if isinstance(text, str) else embeddings
     elif engine == "openai":
         if isinstance(text, list):
@@ -752,6 +816,10 @@ def generate_embeddings(
         else:
             embeddings = generate_openai_batch_embeddings(
                 model, [text], url, key, prefix, user
+            )
+        if embeddings is None:
+            raise RuntimeError(
+                "Failed to generate embeddings via OpenAI-compatible endpoint. Verify the API base URL, key, and model support for embeddings."
             )
         return embeddings[0] if isinstance(text, str) else embeddings
 
