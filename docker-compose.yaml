@@ -15,7 +15,8 @@ services:
       - 'DEPLOYMENT_ID=${DEPLOYMENT_ID-}'
       #- WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
       #- WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
-      #- ENABLE_LOGIN_FORM=false
+      #- ENABLE_LOGIN_FORM=false    # 隱藏登入表單
+      #- ENABLE_SIGNUP=false        # 禁止本地註冊
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
