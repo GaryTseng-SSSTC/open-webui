@@ -1,7 +1,7 @@
 services:
   open-webui:
     build:
-      context: .
+      context: https://github.com/GaryTseng-SSSTC/open-webui.git#main
       dockerfile: Dockerfile
     #image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
     container_name: open-webui
