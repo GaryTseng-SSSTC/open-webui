@@ -7,16 +7,22 @@ services:
     container_name: open-webui
     volumes:
       - D:/open-webui:/app/backend/data
+      - whisper_cache:/root/.cache/whisper/models
     ports:
       - ${OPEN_WEBUI_PORT-3000}:8080
     environment:
       - 'OLLAMA_BASE_URL=http://host.docker.internal:11434'
       - 'WEBUI_SECRET_KEY=899BYHkySz6zCvQ/DbCYltzk8oC4fljAZgfOMsLFMquDZvtyq5ipRHzeedpdo9+l'
       - 'DEPLOYMENT_ID=${DEPLOYMENT_ID-}'
+      - 'WHISPER_MODEL_DIR=/root/.cache/whisper/models'
       #- WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
       #- WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
       #- ENABLE_LOGIN_FORM=false    # 隱藏登入表單
       #- ENABLE_SIGNUP=false        # 禁止本地註冊
+      #- DEFAULT_USER_ROLE=pending  # 新使用者需要審核
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
+
+volumes:
+  whisper_cache:
