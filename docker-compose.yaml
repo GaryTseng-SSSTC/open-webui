@@ -11,8 +11,11 @@ services:
       - ${OPEN_WEBUI_PORT-3000}:8080
     environment:
       - 'OLLAMA_BASE_URL=http://host.docker.internal:11434'
-      - 'WEBUI_SECRET_KEY='
+      - 'WEBUI_SECRET_KEY=899BYHkySz6zCvQ/DbCYltzk8oC4fljAZgfOMsLFMquDZvtyq5ipRHzeedpdo9+l'
       - 'DEPLOYMENT_ID=${DEPLOYMENT_ID-}'
+      #- WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
+      #- WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
+      #- ENABLE_LOGIN_FORM=false
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
