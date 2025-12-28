@@ -3,3 +3,10 @@ $env:COMPOSE_BAKE="false"
 docker compose build --no-cache
 
 docker-compose up -d #根據 docker-compose.yml 檔案建立並在背景模式啟動所有定義的服務容器
+
+If 修改 compose 後執行
+在你這個檔案的情境下（只改註解行 / environment / volumes 等）：
+docker compose up -d
+
+強制重建容器（但仍不重建 image）：
+docker compose up -d --force-recreate
