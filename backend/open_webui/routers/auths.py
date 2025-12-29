@@ -507,14 +507,23 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 ############################
 
 
+"""
+修正版本的 signin 函數
+將此代碼替換 auths.py 的 signin 函數（第 510-634 行）
+"""
+
 @router.post("/signin", response_model=SessionUserResponse)
 async def signin(request: Request, response: Response, form_data: SigninForm):
-    if not ENABLE_PASSWORD_AUTH:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=ERROR_MESSAGES.ACTION_PROHIBITED,
-        )
-
+    """
+    Sign in endpoint with proper Trusted Header Authentication support.
+    
+    Priority order:
+    1. Trusted Header Authentication (if configured)
+    2. Development mode (WEBUI_AUTH=False)
+    3. Password authentication (if ENABLE_PASSWORD_AUTH=True)
+    """
+    
+    # Priority 1: Trusted Header Authentication
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
@@ -529,6 +538,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             except Exception as e:
                 pass
 
+        # Auto-create user if doesn't exist
         if not Users.get_user_by_email(email.lower()):
             await signup(
                 request,
@@ -537,6 +547,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             )
 
         user = Auths.authenticate_user_by_email(email)
+        
+        # Sync groups if configured
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER and user and user.role != "admin":
             group_names = request.headers.get(
                 WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ""
@@ -546,6 +558,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             if group_names:
                 Groups.sync_groups_by_group_names(user.id, group_names)
 
+    # Priority 2: Development mode (no authentication)
     elif WEBUI_AUTH == False:
         admin_email = "admin@localhost"
         admin_password = "admin"
@@ -567,7 +580,9 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             user = Auths.authenticate_user(
                 admin_email.lower(), lambda pw: verify_password(admin_password, pw)
             )
-    else:
+    
+    # Priority 3: Password authentication
+    elif ENABLE_PASSWORD_AUTH:
         if signin_rate_limiter.is_limited(form_data.email.lower()):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -586,9 +601,16 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         user = Auths.authenticate_user(
             form_data.email.lower(), lambda pw: verify_password(form_data.password, pw)
         )
+    
+    # No authentication method available
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ERROR_MESSAGES.ACTION_PROHIBITED,
+        )
 
+    # If authentication successful, create token and return
     if user:
-
         expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
         expires_at = None
         if expires_delta:
@@ -632,7 +654,6 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         }
     else:
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
-
 
 ############################
 # SignUp
