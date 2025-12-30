@@ -508,12 +508,20 @@ async def ldap_auth(request: Request, response: Response, form_data: LdapForm):
 
 
 """
-修正版本的 signin 函數
-將此代碼替換 auths.py 的 signin 函數（第 510-634 行）
+最終修正版本的 signin 函數
+將此代碼替換 auths.py 的 signin 函數
+關鍵改變：form_data 改為可選參數，使用 Body(...) 並設為 None
 """
 
+from typing import Optional
+from fastapi import Body
+
 @router.post("/signin", response_model=SessionUserResponse)
-async def signin(request: Request, response: Response, form_data: SigninForm):
+async def signin(
+    request: Request, 
+    response: Response, 
+    form_data: Optional[SigninForm] = Body(None)  # ← 改為可選！
+):
     """
     Sign in endpoint with proper Trusted Header Authentication support.
     
@@ -583,6 +591,10 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
     
     # Priority 3: Password authentication
     elif ENABLE_PASSWORD_AUTH:
+        # ← 這裡需要檢查 form_data 是否為 None
+        if form_data is None:
+            raise HTTPException(400, detail="Email and password are required")
+        
         if signin_rate_limiter.is_limited(form_data.email.lower()):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -591,11 +603,8 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
 
         password_bytes = form_data.password.encode("utf-8")
         if len(password_bytes) > 72:
-            # TODO: Implement other hashing algorithms that support longer passwords
             log.info("Password too long, truncating to 72 bytes for bcrypt")
             password_bytes = password_bytes[:72]
-
-            # decode safely — ignore incomplete UTF-8 sequences
             form_data.password = password_bytes.decode("utf-8", errors="ignore")
 
         user = Auths.authenticate_user(
@@ -632,7 +641,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
             key="token",
             value=token,
             expires=datetime_expires_at,
-            httponly=True,  # Ensures the cookie is not accessible via JavaScript
+            httponly=True,
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
         )
@@ -654,7 +663,7 @@ async def signin(request: Request, response: Response, form_data: SigninForm):
         }
     else:
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
-
+    
 ############################
 # SignUp
 ############################
