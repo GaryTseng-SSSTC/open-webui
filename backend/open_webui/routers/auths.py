@@ -531,11 +531,46 @@ async def signin(
     3. Password authentication (if ENABLE_PASSWORD_AUTH=True)
     """
     
+    # === DEBUG: 記錄請求開始 ===
+    import os
+    log.info("=" * 80)
+    log.info("SIGNIN REQUEST STARTED")
+    log.info("=" * 80)
+    
+    # === DEBUG: 記錄環境變數配置 ===
+    log.info("Environment Configuration:")
+    log.info(f"  WEBUI_AUTH_TRUSTED_EMAIL_HEADER: {WEBUI_AUTH_TRUSTED_EMAIL_HEADER}")
+    log.info(f"  WEBUI_AUTH_TRUSTED_NAME_HEADER: {WEBUI_AUTH_TRUSTED_NAME_HEADER}")
+    log.info(f"  ENABLE_PASSWORD_AUTH: {ENABLE_PASSWORD_AUTH}")
+    log.info(f"  DEFAULT_USER_ROLE: {os.getenv('DEFAULT_USER_ROLE', 'Not set')}")
+    try:
+        log.info(f"  WEBUI_AUTH: {WEBUI_AUTH}")
+    except:
+        log.info(f"  WEBUI_AUTH: Not defined")
+    
+    # === DEBUG: 記錄重要的 Request Headers ===
+    log.info("Request Headers (auth-related):")
+    for header_name in ['x-user-email', 'x-user-name', 'authorization', 'cookie', 'content-type']:
+        header_value = request.headers.get(header_name, 'NOT FOUND')
+        log.info(f"  {header_name}: {header_value}")
+    
+    # === DEBUG: 記錄 form_data 狀態 ===
+    log.info(f"form_data type: {type(form_data)}")
+    log.info(f"form_data is None: {form_data is None}")
+    if form_data:
+        log.info(f"form_data content: email={getattr(form_data, 'email', 'N/A')}")
+    log.info("=" * 80)
+    
     # Priority 1: Trusted Header Authentication
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
+        log.info(">>> ENTERING PATH 1: Trusted Header Authentication")
+        log.info(f"Looking for header: {WEBUI_AUTH_TRUSTED_EMAIL_HEADER}")
+        
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
             # Helpful diagnostics: in Trusted Header mode, a missing header almost
             # always means the reverse proxy (IIS/NGINX) is not forwarding it.
+            log.error(f"ERROR: Required header '{WEBUI_AUTH_TRUSTED_EMAIL_HEADER}' NOT FOUND")
+            log.error(f"Available headers: {sorted(list(request.headers.keys()))}")
             log.warning(
                 "Trusted-header auth enabled but required header is missing. "
                 "required_header=%s available_headers=%s",
@@ -545,46 +580,87 @@ async def signin(
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
 
         email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
+        log.info(f"✓ Got email from header: {email}")
+        
         name = email
 
         if WEBUI_AUTH_TRUSTED_NAME_HEADER:
             name = request.headers.get(WEBUI_AUTH_TRUSTED_NAME_HEADER, email)
+            log.info(f"✓ Got name from header (before decode): {name}")
             try:
                 name = urllib.parse.unquote(name, encoding="utf-8")
+                log.info(f"✓ URL decoded name: {name}")
             except Exception as e:
+                log.warning(f"Failed to URL decode name: {e}")
                 pass
 
         # Auto-create user if doesn't exist
-        if not Users.get_user_by_email(email.lower()):
-            await signup(
-                request,
-                response,
-                SignupForm(email=email, password=str(uuid.uuid4()), name=name),
-            )
+        existing_user = Users.get_user_by_email(email.lower())
+        log.info(f"Checking if user exists: {email}")
+        log.info(f"User exists: {existing_user is not None}")
+        
+        if not existing_user:
+            log.info(f"User {email} does not exist - creating new user")
+            log.info(f"New user will have DEFAULT_USER_ROLE: {os.getenv('DEFAULT_USER_ROLE', 'pending')}")
+            try:
+                await signup(
+                    request,
+                    response,
+                    SignupForm(email=email, password=str(uuid.uuid4()), name=name),
+                )
+                log.info(f"✓ User {email} created successfully")
+            except Exception as e:
+                log.error(f"ERROR creating user: {e}")
+                raise
+        else:
+            log.info(f"✓ User {email} already exists")
+            log.info(f"  User role: {existing_user.role}")
+            log.info(f"  User ID: {existing_user.id}")
 
+        log.info(f"Attempting to authenticate user: {email}")
         user = Auths.authenticate_user_by_email(email)
+        
+        if user:
+            log.info(f"✓ Authentication successful!")
+            log.info(f"  User ID: {user.id}")
+            log.info(f"  User Email: {user.email}")
+            log.info(f"  User Name: {user.name}")
+            log.info(f"  User Role: {user.role}")
+        else:
+            log.error(f"ERROR: authenticate_user_by_email returned None for {email}")
+            log.error(f"This should not happen after signup/user check")
         
         # Sync groups if configured
         if WEBUI_AUTH_TRUSTED_GROUPS_HEADER and user and user.role != "admin":
+            log.info(f"Checking group sync header: {WEBUI_AUTH_TRUSTED_GROUPS_HEADER}")
             group_names = request.headers.get(
                 WEBUI_AUTH_TRUSTED_GROUPS_HEADER, ""
             ).split(",")
             group_names = [name.strip() for name in group_names if name.strip()]
 
             if group_names:
+                log.info(f"Syncing groups for user {user.email}: {group_names}")
                 Groups.sync_groups_by_group_names(user.id, group_names)
+                log.info(f"✓ Groups synced")
+            else:
+                log.info("No groups to sync (header empty or not present)")
 
     # Priority 2: Development mode (no authentication)
     elif WEBUI_AUTH == False:
+        log.info(">>> ENTERING PATH 2: Development Mode (WEBUI_AUTH=False)")
         admin_email = "admin@localhost"
         admin_password = "admin"
 
         if Users.get_user_by_email(admin_email.lower()):
+            log.info(f"Dev admin user exists, authenticating...")
             user = Auths.authenticate_user(
                 admin_email.lower(), lambda pw: verify_password(admin_password, pw)
             )
+            log.info(f"✓ Dev mode authentication successful")
         else:
+            log.info(f"Dev admin user doesn't exist, creating...")
             if Users.has_users():
+                log.error("ERROR: Cannot create dev admin - other users already exist")
                 raise HTTPException(400, detail=ERROR_MESSAGES.EXISTING_USERS)
 
             await signup(
@@ -592,18 +668,28 @@ async def signin(
                 response,
                 SignupForm(email=admin_email, password=admin_password, name="User"),
             )
+            log.info(f"✓ Dev admin created")
 
             user = Auths.authenticate_user(
                 admin_email.lower(), lambda pw: verify_password(admin_password, pw)
             )
+            log.info(f"✓ Dev admin authenticated")
     
     # Priority 3: Password authentication
     elif ENABLE_PASSWORD_AUTH:
+        log.info(">>> ENTERING PATH 3: Password Authentication")
+        log.info(f"form_data is None: {form_data is None}")
+        
         # ← 這裡需要檢查 form_data 是否為 None
         if form_data is None:
+            log.error("ERROR: form_data is None but required for password authentication")
+            log.error("This likely means an empty body was sent: {}")
             raise HTTPException(400, detail="Email and password are required")
         
+        log.info(f"form_data provided - Email: {form_data.email}")
+        
         if signin_rate_limiter.is_limited(form_data.email.lower()):
+            log.warning(f"Rate limit exceeded for: {form_data.email}")
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
@@ -611,16 +697,30 @@ async def signin(
 
         password_bytes = form_data.password.encode("utf-8")
         if len(password_bytes) > 72:
-            log.info("Password too long, truncating to 72 bytes for bcrypt")
+            log.info(f"Password too long ({len(password_bytes)} bytes), truncating to 72 bytes for bcrypt")
             password_bytes = password_bytes[:72]
             form_data.password = password_bytes.decode("utf-8", errors="ignore")
 
+        log.info(f"Attempting password authentication for: {form_data.email}")
         user = Auths.authenticate_user(
             form_data.email.lower(), lambda pw: verify_password(form_data.password, pw)
         )
+        
+        if user:
+            log.info(f"✓ Password authentication successful for: {user.email}")
+        else:
+            log.error(f"ERROR: Password authentication failed for: {form_data.email}")
     
     # No authentication method available
     else:
+        log.error(">>> ERROR: No authentication method available!")
+        log.error(f"This means none of the conditions matched:")
+        log.error(f"  WEBUI_AUTH_TRUSTED_EMAIL_HEADER: {WEBUI_AUTH_TRUSTED_EMAIL_HEADER}")
+        try:
+            log.error(f"  WEBUI_AUTH: {WEBUI_AUTH}")
+        except:
+            log.error(f"  WEBUI_AUTH: Not defined")
+        log.error(f"  ENABLE_PASSWORD_AUTH: {ENABLE_PASSWORD_AUTH}")
         # Diagnostics: if you intend SSO, configure WEBUI_AUTH_TRUSTED_EMAIL_HEADER
         # and ensure the reverse proxy forwards that request header to the backend.
         log.error(
@@ -637,15 +737,25 @@ async def signin(
 
     # If authentication successful, create token and return
     if user:
+        log.info("=" * 80)
+        log.info("AUTHENTICATION SUCCESSFUL - Creating session token")
+        log.info(f"  User ID: {user.id}")
+        log.info(f"  User Email: {user.email}")
+        log.info(f"  User Role: {user.role}")
+        log.info("=" * 80)
+        
         expires_delta = parse_duration(request.app.state.config.JWT_EXPIRES_IN)
         expires_at = None
         if expires_delta:
             expires_at = int(time.time()) + int(expires_delta.total_seconds())
+            log.info(f"Token will expire at: {expires_at}")
 
         token = create_token(
             data={"id": user.id},
             expires_delta=expires_delta,
         )
+        
+        log.info(f"✓ Token created (length: {len(token)} chars)")
 
         datetime_expires_at = (
             datetime.datetime.fromtimestamp(expires_at, datetime.timezone.utc)
@@ -662,12 +772,16 @@ async def signin(
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
         )
+        
+        log.info(f"✓ Cookie set with token")
 
         user_permissions = get_permissions(
             user.id, request.app.state.config.USER_PERMISSIONS
         )
+        
+        log.info(f"✓ User permissions retrieved: {list(user_permissions.keys()) if user_permissions else 'None'}")
 
-        return {
+        response_data = {
             "token": token,
             "token_type": "Bearer",
             "expires_at": expires_at,
@@ -678,7 +792,18 @@ async def signin(
             "profile_image_url": user.profile_image_url,
             "permissions": user_permissions,
         }
+        
+        log.info("=" * 80)
+        log.info("✓✓✓ SIGNIN SUCCESSFUL ✓✓✓")
+        log.info(f"Returning response for: {user.email} (Role: {user.role})")
+        log.info("=" * 80)
+        
+        return response_data
     else:
+        log.error("=" * 80)
+        log.error("✗✗✗ SIGNIN FAILED ✗✗✗")
+        log.error("user object is None - authentication did not produce a valid user")
+        log.error("=" * 80)
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
     
 ############################
