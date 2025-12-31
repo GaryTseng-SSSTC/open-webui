@@ -534,6 +534,14 @@ async def signin(
     # Priority 1: Trusted Header Authentication
     if WEBUI_AUTH_TRUSTED_EMAIL_HEADER:
         if WEBUI_AUTH_TRUSTED_EMAIL_HEADER not in request.headers:
+            # Helpful diagnostics: in Trusted Header mode, a missing header almost
+            # always means the reverse proxy (IIS/NGINX) is not forwarding it.
+            log.warning(
+                "Trusted-header auth enabled but required header is missing. "
+                "required_header=%s available_headers=%s",
+                WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
+                sorted(list(request.headers.keys())),
+            )
             raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_TRUSTED_HEADER)
 
         email = request.headers[WEBUI_AUTH_TRUSTED_EMAIL_HEADER].lower()
@@ -613,6 +621,15 @@ async def signin(
     
     # No authentication method available
     else:
+        # Diagnostics: if you intend SSO, configure WEBUI_AUTH_TRUSTED_EMAIL_HEADER
+        # and ensure the reverse proxy forwards that request header to the backend.
+        log.error(
+            "No auth method available for /auths/signin. "
+            "WEBUI_AUTH=%s ENABLE_PASSWORD_AUTH=%s WEBUI_AUTH_TRUSTED_EMAIL_HEADER=%s",
+            WEBUI_AUTH,
+            ENABLE_PASSWORD_AUTH,
+            WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=ERROR_MESSAGES.ACTION_PROHIBITED,
