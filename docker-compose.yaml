@@ -15,11 +15,18 @@ services:
       - 'WEBUI_SECRET_KEY=899BYHkySz6zCvQ/DbCYltzk8oC4fljAZgfOMsLFMquDZvtyq5ipRHzeedpdo9+l'
       - 'DEPLOYMENT_ID=${DEPLOYMENT_ID-}'
       - 'WHISPER_MODEL_DIR=/root/.cache/whisper/models'
+      - WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
+      - WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
+      - WEBUI_AUTH_TRUSTED_AUTO_CREATE=true
+      - ENABLE_LOGIN_FORM=false
+      - ENABLE_SIGNUP=false
+      - DEFAULT_USER_ROLE=user
+      - ENABLE_PASSWORD_AUTH=true
       #- WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
       #- WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
-      #- ENABLE_LOGIN_FORM=false    # 隱藏登入表單
-      #- ENABLE_SIGNUP=false        # 禁止本地註冊
-      #- DEFAULT_USER_ROLE=pending  # 新使用者需要審核
+      #- ENABLE_LOGIN_FORM=false 
+      #- ENABLE_SIGNUP=false 
+      #- DEFAULT_USER_ROLE=pending
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
