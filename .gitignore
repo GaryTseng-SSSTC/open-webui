@@ -312,3 +312,5 @@ cypress/screenshots
 .vscode/settings.json
 
 openspec/
+
+.bak
