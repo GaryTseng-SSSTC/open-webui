@@ -815,7 +815,17 @@ async def signin(
 async def signup(request: Request, response: Response, form_data: SignupForm):
     has_users = Users.has_users()
 
-    if WEBUI_AUTH:
+    # === FIX: Allow signup in Trusted Header mode ===
+    is_trusted_header_mode = (
+        WEBUI_AUTH_TRUSTED_EMAIL_HEADER 
+        and WEBUI_AUTH_TRUSTED_EMAIL_HEADER in request.headers
+    )
+    
+    if is_trusted_header_mode:
+        # Trusted Header mode - allow auto-creation of users
+        log.info(f"Signup called in Trusted Header mode for: {form_data.email}")
+        # Skip the permission check - allow creation
+    elif WEBUI_AUTH:
         if (
             not request.app.state.config.ENABLE_SIGNUP
             or not request.app.state.config.ENABLE_LOGIN_FORM
@@ -898,7 +908,8 @@ async def signup(request: Request, response: Response, form_data: SignupForm):
                 user.id, request.app.state.config.USER_PERMISSIONS
             )
 
-            if not has_users:
+            # === FIX: Don't disable signup in Trusted Header mode ===
+            if not has_users and not is_trusted_header_mode:
                 # Disable signup after the first user is created
                 request.app.state.config.ENABLE_SIGNUP = False
 
