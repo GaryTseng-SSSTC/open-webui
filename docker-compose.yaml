@@ -15,18 +15,17 @@ services:
       - 'WEBUI_SECRET_KEY=899BYHkySz6zCvQ/DbCYltzk8oC4fljAZgfOMsLFMquDZvtyq5ipRHzeedpdo9+l'
       - 'DEPLOYMENT_ID=${DEPLOYMENT_ID-}'
       - 'WHISPER_MODEL_DIR=/root/.cache/whisper/models'
-      - WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
-      - WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
-      - WEBUI_AUTH_TRUSTED_AUTO_CREATE=true
-      - ENABLE_LOGIN_FORM=false
-      - ENABLE_SIGNUP=false
-      - DEFAULT_USER_ROLE=user
-      - ENABLE_PASSWORD_AUTH=true
       #- WEBUI_AUTH_TRUSTED_EMAIL_HEADER=X-User-Email
       #- WEBUI_AUTH_TRUSTED_NAME_HEADER=X-User-Name
-      #- ENABLE_LOGIN_FORM=false 
-      #- ENABLE_SIGNUP=false 
-      #- DEFAULT_USER_ROLE=pending
+      #- WEBUI_AUTH_TRUSTED_AUTO_CREATE=true
+      #- ENABLE_LOGIN_FORM=false
+      #- ENABLE_SIGNUP=false
+      #- DEFAULT_USER_ROLE=user
+      #- ENABLE_PASSWORD_AUTH=false
+      #- WEBUI_AUTH_COOKIE_SAME_SITE=Lax
+      #- WEBUI_AUTH_COOKIE_SECURE=false
+      #- 'WEBUI_URL=http://10.6.218.103'
+      #- 'ORIGIN=http://10.6.218.103'
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
